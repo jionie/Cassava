@@ -1,0 +1,5 @@
+.Idea/*
+*.xml
+*.iml
+*.pyc
+runs/*
