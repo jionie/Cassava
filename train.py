@@ -7,6 +7,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import random
 import argparse
 import numpy as np
+import time
 
 # import pytorch related libraries
 import torch
@@ -137,13 +138,13 @@ class Cassava():
 
         self.optimizer_grouped_parameters = [
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay) and is_backbone(n)],
-             'lr': self.config.min_lr,
+             'lr': self.config.backbone_lr,
              'weight_decay': self.config.weight_decay},
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay) and not is_backbone(n)],
              'lr': self.config.lr,
              'weight_decay': self.config.weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay) and is_backbone(n)],
-             'lr': self.config.min_lr,
+             'lr': self.config.backbone_lr,
              'weight_decay': 0.0},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay) and not is_backbone(n)],
              'lr': self.config.lr,
@@ -196,8 +197,8 @@ class Cassava():
                                                              num_training_steps=num_train_optimization_steps)
             self.lr_scheduler_each_iter = True
         elif self.config.lr_scheduler_name == "ReduceLROnPlateau":
-            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5,
-                                                                        patience=2, min_lr=1e-6)
+            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.4,
+                                                                        patience=1, min_lr=1e-6)
             self.lr_scheduler_each_iter = False
         else:
             raise NotImplementedError
@@ -306,7 +307,9 @@ class Cassava():
         self.log.write('   batch_size=%d,  accumulation_steps=%d\n' % (self.config.batch_size,
                                                                        self.config.accumulation_steps))
         self.log.write('   experiment  = %s\n' % str(__file__.split('/')[-2:]))
-        self.loss = CrossEntropyLossOHEM(top_k=0.9, ignore_index=None)
+
+        self.timer = time.time()
+        self.loss = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
 
         while self.epoch <= self.config.num_epoch:
 
@@ -393,8 +396,10 @@ class Cassava():
                     sum_train_loss[...] = 0
                     sum_train[...] = 0
 
+                    curr_time = time.time()
                     self.log.write(
-                        'lr: %f train loss: %f train_acc: %f ' % (rate, train_loss[0], self.train_metrics))
+                        'time elapsed: %f lr: %f train loss: %f train_acc: %f \n' % (curr_time - self.timer, rate, train_loss[0], self.train_metrics))
+                    self.timer = curr_time
 
                 if (tr_batch_i + 1) % self.eval_step == 0:
                     self.evaluate_op()
@@ -453,9 +458,7 @@ class Cassava():
                 valid_num = valid_num + n
 
             self.eval_metrics = accuracy_metric(np.squeeze(self.eval_label), np.squeeze(self.eval_prediction))
-
             valid_loss = valid_loss / valid_num
-            mean_eval_metric = valid_loss[0]
 
             self.log.write(
                 'val loss: %f ' % (valid_loss[0]) +
@@ -463,14 +466,14 @@ class Cassava():
                 % self.eval_metrics)
 
         if self.config.lr_scheduler_name == "ReduceLROnPlateau":
-            self.scheduler.step(mean_eval_metric)
+            self.scheduler.step(self.eval_metrics)
 
-        if mean_eval_metric >= self.valid_metric_optimal:
+        if self.eval_metrics >= self.valid_metric_optimal:
 
             self.log.write('Validation metric improved ({:.6f} --> {:.6f}).  Saving model ...'.format(
-                self.valid_metric_optimal, mean_eval_metric))
+                self.valid_metric_optimal, self.eval_metrics))
 
-            self.valid_metric_optimal = mean_eval_metric
+            self.valid_metric_optimal = self.eval_metrics
             self.save_check_point()
 
             self.count = 0

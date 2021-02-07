@@ -43,21 +43,21 @@ class Config:
         else:
             self.reuse_model = False
         # optimizer
-        self.optimizer_name = "Adam"
+        self.optimizer_name = "AdamW"
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 2
         # lr scheduler, can choose to use proportion or steps
-        self.lr_scheduler_name = 'WarmupCosineAnealing'
+        self.lr_scheduler_name = 'ReduceLROnPlateau'
         self.warmup_proportion = 1 / 30
         self.warmup_steps = 0
         # lr
-        self.lr = 2e-3
+        self.lr = 5e-4
         self.weight_decay = 1e-4
-        self.min_lr = 1e-6
+        self.backbone_lr = 5e-4
         # dataloader settings
         self.batch_size = batch_size
-        self.val_batch_size = 8
-        self.num_workers = 4
+        self.val_batch_size = 32
+        self.num_workers = 24
         self.shuffle = True
         self.drop_last = True
         # gradient accumulation
@@ -67,7 +67,7 @@ class Config:
         # saving rate
         self.saving_rate = 1
         # early stopping
-        self.early_stopping = 40 / self.saving_rate
+        self.early_stopping = 5 / self.saving_rate
         # progress rate
         self.progress_rate = 1 / 10
         # transform
@@ -80,12 +80,26 @@ class Config:
             A.Flip(p=0.5),
             A.OneOf([
                 A.Cutout(num_holes=8, max_h_size=2, max_w_size=4, fill_value=0),
-                GridMask(num_grid=(3, 7), p=1),
+                # GridMask(num_grid=(3, 7), p=1),
                 A.ShiftScaleRotate(shift_limit=0.1, scale_limit=.15, rotate_limit=25, border_mode=cv2.BORDER_CONSTANT),
-                A.IAAAffine(shear=20, mode='constant'),
-                A.IAAPerspective(),
                 A.GridDistortion(distort_limit=0.01),
-            ], p=0.8)
+            ], p=0.75),
+            A.OneOf([
+                A.IAAAdditiveGaussianNoise(scale=(0.01 * 255, 0.05 * 255)),
+                A.GaussNoise(var_limit=(0.1, 0.5)),
+            ], p=0.2),
+            A.OneOf([
+                A.MotionBlur(p=0.2),
+                A.MedianBlur(blur_limit=3, p=0.1),
+                A.Blur(blur_limit=3, p=0.1),
+            ], p=0.2),
+            A.OneOf([
+                A.CLAHE(clip_limit=2),
+                A.IAASharpen(),
+                A.IAAEmboss(),
+                A.RandomBrightnessContrast(),
+            ], p=0.3),
+            A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.3),
         ])
 
         self.val_transforms = A.Compose([
