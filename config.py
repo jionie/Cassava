@@ -1,6 +1,6 @@
 import os
-from utils.augmentation import *
 import albumentations as A
+import cv2
 
 
 class Config:

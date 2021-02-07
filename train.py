@@ -333,8 +333,9 @@ class Cassava():
 
         return image, targets
 
-    def cutmix_criterion(self, prediction, label):
-
+    def cutmix_criterion(self, prediction, targets):
+        target, shuffled_target, lam = targets
+        return self.criterion(prediction, target) * lam + self.criterion(prediction, shuffled_target) * (1-lam)
 
     def train_op(self):
         self.show_info()
@@ -344,7 +345,7 @@ class Cassava():
         self.log.write('   experiment  = %s\n' % str(__file__.split('/')[-2:]))
 
         self.timer = time.time()
-        self.loss = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
+        self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
 
         while self.epoch <= self.config.num_epoch:
 
@@ -378,13 +379,15 @@ class Cassava():
                 image = image.to(self.config.device).float()
                 label = label.to(self.config.device)
 
+                image, targets = self.cutmix(image, label, 1)
+
                 prediction = self.model(image)
                 if self.config.apex:
                     with torch.cuda.amp.autocast():
-                        loss = self.loss(prediction, label)
+                        loss = self.cutmix_criterion(prediction, targets)
                     self.scaler.scale(loss).backward()
                 else:
-                    loss = self.loss(prediction, label)
+                    loss = self.cutmix_criterion(prediction, targets)
                     loss.backward()
 
                 if (tr_batch_i + 1) % self.config.accumulation_steps == 0:
@@ -468,7 +471,7 @@ class Cassava():
                 label = label.to(self.config.device)
 
                 prediction = self.model(image)
-                loss = self.loss(prediction, label)
+                loss = self.criterion(prediction, label)
 
                 self.writer.add_scalar('val_loss_' + str(self.config.fold), loss.item(), (self.eval_count - 1) * len(
                     self.val_data_loader) * self.config.val_batch_size + val_batch_i * self.config.val_batch_size)
