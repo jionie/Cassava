@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES="0" python train.py --fold 0 --model_type "se_resnext50" --seed 1997 --batch_size 24 --accumulation_steps 3

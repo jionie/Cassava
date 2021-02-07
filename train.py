@@ -301,6 +301,41 @@ class Cassava():
             self.log.write('\nModel restored from {}.'.format(self.config.load_point))
         self.log.write('\n')
 
+    def rand_bbox(self, size, lam):
+        W = size[2]
+        H = size[3]
+        cut_rat = np.sqrt(1. - lam)
+        cut_w = np.int(W * cut_rat)
+        cut_h = np.int(H * cut_rat)
+
+        # uniform
+        cx = np.random.randint(W)
+        cy = np.random.randint(H)
+
+        bbx1 = np.clip(cx - cut_w // 2, 0, W)
+        bby1 = np.clip(cy - cut_h // 2, 0, H)
+        bbx2 = np.clip(cx + cut_w // 2, 0, W)
+        bby2 = np.clip(cy + cut_h // 2, 0, H)
+        return bbx1, bby1, bbx2, bby2
+
+    def cutmix(self, image, target, alpha, clip=None):
+        if clip is None:
+            clip = [0.3, 0.7]
+        indices = torch.randperm(image.size(0))
+        shuffled_target = target[indices]
+
+        lam = np.clip(np.random.beta(alpha, alpha), clip[0], clip[1])
+        bbx1, bby1, bbx2, bby2 = self.rand_bbox(image.size(), lam)
+        image[:, :, bbx1:bbx2, bby1:bby2] = image[indices, :, bbx1:bbx2, bby1:bby2]
+        # adjust lambda to exactly match pixel ratio
+        lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (image.size()[-1] * image.size()[-2]))
+        targets = (target, shuffled_target, lam)
+
+        return image, targets
+
+    def cutmix_criterion(self, prediction, label):
+
+
     def train_op(self):
         self.show_info()
         self.log.write('** start training here! **\n')
