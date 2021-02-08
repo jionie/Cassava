@@ -71,17 +71,16 @@ class Config:
         # progress rate
         self.progress_rate = 1 / 10
         # transform
-        self.height = height
+        self.HEIGHT = height
         self.WIDTH = width
         self.transforms = A.Compose([
-            A.Resize(height=self.height, width=self.WIDTH, p=1.0),
+            A.RandomResizedCrop(height=self.HEIGHT, width=self.WIDTH, scale=(0.36, 1.0), p=1.0),
             A.RandomRotate90(p=0.5),
             A.Transpose(p=0.5),
             A.Flip(p=0.5),
             A.OneOf([
                 A.Cutout(num_holes=4, max_h_size=32, max_w_size=32, fill_value=0),
                 # GridMask(num_grid=(3, 7), p=1),
-                # A.ShiftScaleRotate(shift_limit=0.1, scale_limit=.15, rotate_limit=25, border_mode=cv2.BORDER_CONSTANT),
                 A.GridDistortion(distort_limit=0.01),
             ], p=0.75),
             A.OneOf([
@@ -103,5 +102,5 @@ class Config:
         ])
 
         self.val_transforms = A.Compose([
-            A.Resize(height=self.height, width=self.WIDTH, p=1.0),
+            A.CenterCrop(height=self.HEIGHT, width=self.WIDTH, p=1.0),
         ])
