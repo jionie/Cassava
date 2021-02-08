@@ -22,7 +22,7 @@ from utils.ranger import Ranger
 from utils.lrs_scheduler import GradualWarmupScheduler, WarmRestart, CosineAnnealingWarmUpRestarts
 from utils.metric import accuracy_metric
 from utils.file import Logger
-from utils.loss_function import CrossEntropyLossOHEM
+from utils.loss_function import LabelSmoothingCrossEntropy
 
 # import model
 from model.model import CassavaModel
@@ -345,7 +345,7 @@ class Cassava():
         self.log.write('   experiment  = %s\n' % str(__file__.split('/')[-2:]))
 
         self.timer = time.time()
-        self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
+        self.criterion = LabelSmoothingCrossEntropy()
 
         while self.epoch <= self.config.num_epoch:
 
