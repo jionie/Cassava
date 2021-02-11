@@ -47,14 +47,18 @@ class CassavaDataset(Dataset):
         self.mode = mode
         self.transforms = transforms
         self.image_ids = self.df["image_id"].values
-        self.labels = self.df["label"].values
+
+        if self.mode == "train":
+            self.labels = self.df["pseudo_label"].values
+        else:
+            self.labels = self.df["label"].values
 
     def __len__(self):
         return self.df.shape[0]
 
     def __getitem__(self, idx):
 
-        if self.mode == "train":
+        if self.mode == "train" or self.mode == "val":
             image_src = self.data_path + "train_images/" + self.image_ids[idx]
         elif self.mode == "test":
             image_src = self.data_path + "test_images/" + self.image_ids[idx]
@@ -82,7 +86,7 @@ def get_train_val_split(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/ca
                         seed=960630,
                         split="StratifiedKFold"):
 
-    df_path = os.path.join(data_path, "merged.csv")
+    df_path = os.path.join(data_path, "merged_pseudo.csv")
     os.makedirs(os.path.join(save_path, "split/{}".format(split)), exist_ok=True)
     df = pd.read_csv(df_path, encoding="utf8")
 
@@ -162,7 +166,7 @@ def get_train_val_loader(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/c
     val_df = pd.read_csv(val_df_path)
 
     train_dataset = CassavaDataset(df=train_df, data_path=data_path, mode="train", transforms=transforms)
-    val_dataset = CassavaDataset(df=val_df, data_path=data_path, mode="train", transforms=val_transforms)
+    val_dataset = CassavaDataset(df=val_df, data_path=data_path, mode="val", transforms=val_transforms)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True,
                               drop_last=True)
