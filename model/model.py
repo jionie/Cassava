@@ -1,4 +1,5 @@
 import numpy as np
+import timm
 import torch
 import torch.nn as nn
 from pytorchcv.model_provider import get_model as ptcv_get_model
@@ -91,6 +92,20 @@ class CassavaModel(nn.Module):
             self.feature_size = 4320
             self.backbone.features.final_pool = Identity()
 
+        elif "vovnet" in model_name.lower():
+            self.backbone = timm.create_model(model_name, pretrained=True)
+            self.feature_size = 1024
+
+        elif "vit_base" in model_name.lower():
+            self.backbone = timm.create_model(model_name, pretrained=True)
+            self.backbone.pre_logits = nn.Identity()
+            self.feature_size = 768
+
+        elif "vit_large" in model_name.lower():
+            self.backbone = timm.create_model(model_name, pretrained=True)
+            self.backbone.pre_logits = nn.Identity()
+            self.feature_size = 1024
+
         else:
             raise NotImplementedError
 
@@ -121,10 +136,20 @@ class CassavaModel(nn.Module):
         bs = x.shape[0]
         if "efficientnet" in self.model_name.lower():
             x = self.backbone.extract_features(x)
+            logit = self.avg_poolings(x)
+
+        elif "vovnet" in self.model_name.lower():
+            x = self.backbone.forward_features(x)
+            logit = self.avg_poolings(x)
+
+        elif "vit" in self.model_name.lower():
+            x = self.backbone.forward_features(x)
+            logit = x
+
         else:
             x = self.backbone.features(x)
+            logit = self.avg_poolings(x)
 
-        logit = self.avg_poolings(x)
         logit = logit.view(bs, -1)
 
         logit = self.tail(logit)
