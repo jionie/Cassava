@@ -22,7 +22,7 @@ from utils.ranger import Ranger
 from utils.lrs_scheduler import GradualWarmupScheduler, WarmRestart, CosineAnnealingWarmUpRestarts
 from utils.metric import accuracy_metric
 from utils.file import Logger
-from utils.loss_function import LabelSmoothingCrossEntropy
+from utils.loss_function import CrossEntropyLossOHEM
 
 # import model
 from model.model import CassavaModel
@@ -331,7 +331,7 @@ class Cassava():
         lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (image.size()[-1] * image.size()[-2]))
         targets = (target, shuffled_target, lam)
 
-        return image, targets
+        return image, targets, indices
 
     def cutmix_criterion(self, prediction, targets):
         target, shuffled_target, lam = targets
@@ -345,7 +345,7 @@ class Cassava():
         self.log.write('   experiment  = %s\n' % str(__file__.split('/')[-2:]))
 
         self.timer = time.time()
-        self.criterion = LabelSmoothingCrossEntropy()
+        self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
 
         while self.epoch <= self.config.num_epoch:
 
@@ -366,7 +366,7 @@ class Cassava():
             torch.cuda.empty_cache()
             self.model.zero_grad()
 
-            for tr_batch_i, (image, label) in enumerate(self.train_data_loader):
+            for tr_batch_i, (image, label, pseudo_label) in enumerate(self.train_data_loader):
 
                 rate = 0
                 for param_group in self.optimizer.param_groups:
@@ -378,16 +378,18 @@ class Cassava():
                 # set input to cuda mode
                 image = image.to(self.config.device).float()
                 label = label.to(self.config.device)
+                pseudo_label = pseudo_label.to(self.config.device)
 
-                image, targets = self.cutmix(image, label, 1)
+                image, targets, indices = self.cutmix(image, label, 1)
+                pseudo_targets = (targets[0], pseudo_label[indices], targets[2])
 
                 prediction = self.model(image)
                 if self.config.apex:
                     with torch.cuda.amp.autocast():
-                        loss = self.cutmix_criterion(prediction, targets)
+                        loss = 0.7 * self.cutmix_criterion(prediction, targets) + 0.3 * self.cutmix_criterion(prediction, pseudo_targets)
                     self.scaler.scale(loss).backward()
                 else:
-                    loss = self.cutmix_criterion(prediction, targets)
+                    loss = 0.7 * self.cutmix_criterion(prediction, targets) + 0.3 * self.cutmix_criterion(prediction, pseudo_targets)
                     loss.backward()
 
                 if (tr_batch_i + 1) % self.config.accumulation_steps == 0:
@@ -461,7 +463,7 @@ class Cassava():
 
             # init cache
             torch.cuda.empty_cache()
-            for val_batch_i, (image, label) in enumerate(self.val_data_loader):
+            for val_batch_i, (image, label, pseudo_label) in enumerate(self.val_data_loader):
 
                 # set model to eval mode
                 self.model.eval()
@@ -469,9 +471,10 @@ class Cassava():
                 # set input to cuda mode
                 image = image.to(self.config.device).float()
                 label = label.to(self.config.device)
+                pseudo_label = pseudo_label.to(self.config.device)
 
                 prediction = self.model(image)
-                loss = self.criterion(prediction, label)
+                loss = 0.7 * self.criterion(prediction, label) + 0.3 * self.criterion(prediction, pseudo_label)
 
                 self.writer.add_scalar('val_loss_' + str(self.config.fold), loss.item(), (self.eval_count - 1) * len(
                     self.val_data_loader) * self.config.val_batch_size + val_batch_i * self.config.val_batch_size)

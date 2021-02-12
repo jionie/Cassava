@@ -48,10 +48,9 @@ class CassavaDataset(Dataset):
         self.transforms = transforms
         self.image_ids = self.df["image_id"].values
 
-        if self.mode == "train":
-            self.labels = self.df["pseudo_label"].values
-        else:
-            self.labels = self.df["label"].values
+        self.labels = self.df["label"].values
+        if self.mode != "test":
+            self.pseudo_labels = self.df["pseudo_label"].values
 
     def __len__(self):
         return self.df.shape[0]
@@ -76,7 +75,12 @@ class CassavaDataset(Dataset):
         image = image.transpose(2, 0, 1)
         labels = self.labels[idx].astype(np.int)
 
-        return torch.tensor(image), torch.tensor(labels)
+        if self.mode != "test":
+            pseudo_labels = self.pseudo_labels[idx].astype(np.int)
+        else:
+            pseudo_labels = labels
+
+        return torch.tensor(image), torch.tensor(labels), torch.tensor(pseudo_labels)
 
 
 ############################################ Define getting data split functions
@@ -212,18 +216,20 @@ def test_train_val_loader(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/
                                                     num_workers=num_workers, transforms=transforms,
                                                     val_transforms=val_transforms)
 
-    for i, (image, label) in enumerate(train_loader):
+    for i, (image, label, pseudo_label) in enumerate(train_loader):
         print("----------------------test train_loader-------------------")
         print("image shape: ", image.shape)
         print("label shape: ", label.shape)
+        print("pseudo_label shape: ", pseudo_label.shape)
         print("-----------------------finish testing------------------------")
 
         break
 
-    for i, (image, label) in enumerate(val_loader):
+    for i, (image, label, pseudo_label) in enumerate(val_loader):
         print("----------------------test val_loader-------------------")
         print("image shape: ", image.shape)
         print("label shape: ", label.shape)
+        print("pseudo_label shape: ", pseudo_label.shape)
         print("-----------------------finish testing------------------------")
 
         break
