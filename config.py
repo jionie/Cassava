@@ -52,7 +52,7 @@ class Config:
         self.warmup_steps = 0
         # lr
         self.lr = 1e-3
-        self.weight_decay = 1e-4
+        self.weight_decay = 0
         self.backbone_lr = 1e-3
         # dataloader settings
         self.batch_size = batch_size
