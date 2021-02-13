@@ -22,7 +22,7 @@ from utils.ranger import Ranger
 from utils.lrs_scheduler import GradualWarmupScheduler, WarmRestart, CosineAnnealingWarmUpRestarts
 from utils.metric import accuracy_metric
 from utils.file import Logger
-from utils.loss_function import CrossEntropyLossOHEM
+from utils.loss_function import CrossEntropyLossOHEM, BiTemperedLogisticLoss
 
 # import model
 from model.model import CassavaModel
@@ -215,9 +215,15 @@ class Cassava():
     def load_check_point(self):
         self.log.write('Model loaded as {}.'.format(self.config.load_point))
         checkpoint_to_load = torch.load(self.config.load_point, map_location=self.config.device)
-        self.step = checkpoint_to_load['step']
-        self.epoch = checkpoint_to_load['epoch']
-        self.valid_metric_optimal = checkpoint_to_load['valid_metric_optimal']
+
+        if not self.config.is_finetune:
+            self.step = checkpoint_to_load['step']
+            self.epoch = checkpoint_to_load['epoch']
+            self.valid_metric_optimal = checkpoint_to_load['valid_metric_optimal']
+        else:
+            self.step = 0
+            self.epoch = 0
+            self.valid_metric_optimal = float('-inf')
 
         model_state_dict = checkpoint_to_load['model']
         state_dict = self.model.state_dict()
@@ -254,7 +260,8 @@ class Cassava():
                 'model': self.model.state_dict()
             }
 
-        save_path = self.config.save_point.format(self.step, self.epoch)
+        # save_path = self.config.save_point.format(self.step, self.epoch)
+        save_path = self.config.save_point.format(0, 0)
         torch.save(checkpoint_to_save, save_path)
         self.log.write('Model saved as {}.'.format(save_path))
 
@@ -345,7 +352,8 @@ class Cassava():
         self.log.write('   experiment  = %s\n' % str(__file__.split('/')[-2:]))
 
         self.timer = time.time()
-        self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
+        # self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
+        self.criterion = BiTemperedLogisticLoss(0.4, 0.5, 0)
 
         while self.epoch <= self.config.num_epoch:
 

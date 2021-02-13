@@ -9,6 +9,7 @@ class Config:
                  width=512):
         # setting
         self.reuse_model = True
+        self.is_finetune = True  # set this to True if only use 2020 data to train
         self.data_parallel = False  # enable data parallel training
         self.adversarial = False  # enable adversarial training, not support now
         self.apex = True  # enable mix precision training
@@ -17,49 +18,60 @@ class Config:
         # model
         self.model_type = model_type
         # path, specify the path for data
-        self.data_path = '/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/'
+        self.data_path = "/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/"
         # path, specify the path for saving splitted csv
-        self.save_path = '/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/'
+        self.save_path = "/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/"
         # k fold setting
         self.split = "StratifiedKFold"
         self.seed = seed
         self.n_splits = 5
         self.fold = fold
+
         # path, specify the path for saving model
         self.model_folder = os.path.join("/media/jionie/my_disk/Kaggle/Cassava/ckpt", self.model_type)
         if not os.path.exists(self.model_folder):
             os.mkdir(self.model_folder)
-        self.checkpoint_folder_all_fold = os.path.join(self.model_folder, 'seed_' + str(self.seed))
+        
+        if self.is_finetune:
+            self.checkpoint_folder_all_fold = os.path.join(self.model_folder, "seed_" + str(self.seed) + "_finetune")
+        else:
+            self.checkpoint_folder_all_fold = os.path.join(self.model_folder, "seed_" + str(self.seed))
+
         if not os.path.exists(self.checkpoint_folder_all_fold):
             os.mkdir(self.checkpoint_folder_all_fold)
-        self.checkpoint_folder = os.path.join(self.checkpoint_folder_all_fold, 'fold_' + str(self.fold) + '/')
+        self.checkpoint_folder = os.path.join(self.checkpoint_folder_all_fold, "fold_" + str(self.fold) + "/")
         if not os.path.exists(self.checkpoint_folder):
             os.mkdir(self.checkpoint_folder)
-        self.save_point = os.path.join(self.checkpoint_folder, '{}_step_{}_epoch.pth')
-        self.load_points = [p for p in os.listdir(self.checkpoint_folder) if p.endswith('.pth')]
+        self.save_point = os.path.join(self.checkpoint_folder, "{}_step_{}_epoch.pth")
+        self.load_points = [p for p in os.listdir(self.checkpoint_folder) if p.endswith(".pth")]
         if len(self.load_points) != 0:
-            self.load_point = sorted(self.load_points, key=lambda x: int(x.split('_')[0]))[-1]
+            self.load_point = sorted(self.load_points, key=lambda x: int(x.split("_")[0]))[-1]
             self.load_point = os.path.join(self.checkpoint_folder, self.load_point)
         else:
             self.reuse_model = False
+
         # optimizer
         self.optimizer_name = "AdamW"
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 2
+
         # lr scheduler, can choose to use proportion or steps
-        self.lr_scheduler_name = 'WarmCosineAnealingRestart'
+        self.lr_scheduler_name = "WarmCosineAnealingRestart"
         self.warmup_proportion = 0.5 / 30
         self.warmup_steps = 0
+
         # lr
         self.lr = 1e-3
-        self.weight_decay = 1e-4
+        self.weight_decay = 0
         self.backbone_lr = 1e-3
+
         # dataloader settings
         self.batch_size = batch_size
         self.val_batch_size = 32
         self.num_workers = 24
         self.shuffle = True
         self.drop_last = True
+
         # gradient accumulation
         self.accumulation_steps = accumulation_steps
         # epochs
