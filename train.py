@@ -8,7 +8,7 @@ import random
 import argparse
 import numpy as np
 import time
-
+from tqdm import tqdm
 # import pytorch related libraries
 import torch
 from tensorboardX import SummaryWriter
@@ -22,7 +22,8 @@ from utils.ranger import Ranger
 from utils.lrs_scheduler import GradualWarmupScheduler, WarmRestart, CosineAnnealingWarmUpRestarts
 from utils.metric import accuracy_metric
 from utils.file import Logger
-from utils.loss_function import CrossEntropyLossOHEM
+from utils.loss_function import CrossEntropyLossOHEM, BiTemperedLogisticLoss, DenseCrossEntropy
+from timm.utils import NativeScaler, ModelEma
 
 # import model
 from model.model import CassavaModel
@@ -162,7 +163,7 @@ class Cassava():
         elif self.config.optimizer_name == "Ranger":
             self.optimizer = Ranger(self.optimizer_grouped_parameters)
         elif self.config.optimizer_name == "AdamW":
-            self.optimizer = torch.optim.AdamW(self.optimizer_grouped_parameters, eps=self.config.adam_epsilon)
+            self.optimizer = torch.optim.AdamW(self.optimizer_grouped_parameters, eps=self.config.adam_epsilon, betas=(0.9, 0.999))
         else:
             raise NotImplementedError
 
@@ -200,6 +201,9 @@ class Cassava():
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.4,
                                                                         patience=1, min_lr=1e-6)
             self.lr_scheduler_each_iter = False
+        elif self.config.lr_scheduler_name == "cosanneal":
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=1426, eta_min=1e-6)
+            self.lr_scheduler_each_iter = True
         else:
             raise NotImplementedError
 
@@ -210,7 +214,8 @@ class Cassava():
             self.scheduler.step(self.epoch)
 
     def prepare_apex(self):
-        self.scaler = torch.cuda.amp.GradScaler()
+        # self.scaler = torch.cuda.amp.GradScaler()
+        self.scaler = NativeScaler()
 
     def load_check_point(self):
         self.log.write('Model loaded as {}.'.format(self.config.load_point))
@@ -345,7 +350,12 @@ class Cassava():
         self.log.write('   experiment  = %s\n' % str(__file__.split('/')[-2:]))
 
         self.timer = time.time()
-        self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
+        # self.criterion = CrossEntropyLossOHEM(top_k=1, ignore_index=None)
+        self.criterion = BiTemperedLogisticLoss(0.4, 1.5, 0.2)
+        self.criterion2 = DenseCrossEntropy()
+        model_ema = ModelEma(
+            self.model,
+            decay=0.99996)
 
         while self.epoch <= self.config.num_epoch:
 
@@ -366,7 +376,7 @@ class Cassava():
             torch.cuda.empty_cache()
             self.model.zero_grad()
 
-            for tr_batch_i, (image, label, pseudo_label) in enumerate(self.train_data_loader):
+            for tr_batch_i, (image, label, pseudo_label) in tqdm(enumerate(self.train_data_loader), total=len(self.train_data_loader)):
 
                 rate = 0
                 for param_group in self.optimizer.param_groups:
@@ -380,25 +390,37 @@ class Cassava():
                 label = label.to(self.config.device)
                 pseudo_label = pseudo_label.to(self.config.device)
 
-                image, targets, indices = self.cutmix(image, label, 1)
-                pseudo_targets = (targets[0], pseudo_label[indices], targets[2])
+                # image, targets, indices = self.cutmix(image, label, 1)
+                # pseudo_targets = (targets[0], pseudo_label[indices], targets[2])
+
+                image, targets, pseudo_targets = image, label, pseudo_label
 
                 prediction = self.model(image)
+                # if self.config.apex:
+                #     with torch.cuda.amp.autocast():
+                #         loss = 0.7 * self.cutmix_criterion(prediction, targets) + 0.3 * self.cutmix_criterion(prediction, pseudo_targets)
+                #     self.scaler.scale(loss).backward()
+                # else:
+                #     loss = 0.7 * self.cutmix_criterion(prediction, targets) + 0.3 * self.cutmix_criterion(prediction, pseudo_targets)
+                #     loss.backward()
+
                 if self.config.apex:
                     with torch.cuda.amp.autocast():
-                        loss = 0.7 * self.cutmix_criterion(prediction, targets) + 0.3 * self.cutmix_criterion(prediction, pseudo_targets)
-                    self.scaler.scale(loss).backward()
+                        loss = self.criterion(prediction, targets)+self.criterion2(prediction, targets)
+                    # self.scaler.scale(loss).backward()
                 else:
-                    loss = 0.7 * self.cutmix_criterion(prediction, targets) + 0.3 * self.cutmix_criterion(prediction, pseudo_targets)
-                    loss.backward()
+                    loss = 0.7 * self.criterion(prediction, targets) + 0.3 * self.criterion(prediction, pseudo_targets)
+                    # loss.backward()
 
                 if (tr_batch_i + 1) % self.config.accumulation_steps == 0:
                     # use apex
                     if self.config.apex:
+                        self.scaler(loss/self.config.accumulation_steps, self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.config.max_grad_norm,
                                                        norm_type=2)
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
+                        # self.scaler.step(self.optimizer)
+                        # self.scaler.update()
+                        model_ema.update(self.model)
                     else:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.config.max_grad_norm,
                                                        norm_type=2)
@@ -421,7 +443,7 @@ class Cassava():
                 label = label.detach().cpu().numpy()
 
                 # running mean
-                metrics = accuracy_metric(np.squeeze(label), np.squeeze(prediction))
+                metrics = accuracy_metric(np.squeeze(np.argmax(label, axis=1)), np.squeeze(prediction))
                 if metrics is not None:
                     self.train_metrics = (self.train_metrics * tr_batch_i + metrics) / (tr_batch_i + 1)
 
@@ -463,7 +485,7 @@ class Cassava():
 
             # init cache
             torch.cuda.empty_cache()
-            for val_batch_i, (image, label, pseudo_label) in enumerate(self.val_data_loader):
+            for val_batch_i, (image, label, pseudo_label) in tqdm(enumerate(self.val_data_loader), total=len(self.val_data_loader)):
 
                 # set model to eval mode
                 self.model.eval()
@@ -498,7 +520,7 @@ class Cassava():
                 valid_loss = valid_loss + l
                 valid_num = valid_num + n
 
-            self.eval_metrics = accuracy_metric(np.squeeze(self.eval_label), np.squeeze(self.eval_prediction))
+            self.eval_metrics = accuracy_metric(np.squeeze(np.argmax(self.eval_label, axis=1)), np.squeeze(self.eval_prediction))
             valid_loss = valid_loss / valid_num
 
             self.log.write(

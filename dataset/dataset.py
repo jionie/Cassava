@@ -49,8 +49,8 @@ class CassavaDataset(Dataset):
         self.image_ids = self.df["image_id"].values
 
         self.labels = self.df["label"].values
-        if self.mode != "test":
-            self.pseudo_labels = self.df["pseudo_label"].values
+        # if self.mode != "test":
+        #     self.pseudo_labels = self.df["pseudo_label"].values
 
     def __len__(self):
         return self.df.shape[0]
@@ -73,14 +73,19 @@ class CassavaDataset(Dataset):
         image = image.astype(np.float32)
         image /= 255
         image = image.transpose(2, 0, 1)
-        labels = self.labels[idx].astype(np.int)
 
-        if self.mode != "test":
-            pseudo_labels = self.pseudo_labels[idx].astype(np.int)
-        else:
-            pseudo_labels = labels
+        # labels = self.labels[idx].astype(np.int)
 
-        return torch.tensor(image), torch.tensor(labels), torch.tensor(pseudo_labels)
+        # if self.mode != "test":
+        #     pseudo_labels = self.pseudo_labels[idx].astype(np.int)
+        # else:
+        #     pseudo_labels = labels
+
+        labels = self.df.loc[idx, ['label']]
+        labels = torch.zeros(5).scatter_(0, torch.LongTensor(labels), 1)
+        pseudo_labels = labels
+
+        return torch.tensor(image), labels, pseudo_labels
 
 
 ############################################ Define getting data split functions
@@ -90,12 +95,14 @@ def get_train_val_split(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/ca
                         seed=960630,
                         split="StratifiedKFold"):
 
-    df_path = os.path.join(data_path, "merged_pseudo.csv")
+    df_path = os.path.join(data_path, "train.csv")
     os.makedirs(os.path.join(save_path, "split/{}".format(split)), exist_ok=True)
     df = pd.read_csv(df_path, encoding="utf8")
 
-    df_2019 = df[df["source"] == 2019]
-    df_2020 = df[df["source"] == 2020]
+    # df_2019 = df[df["source"] == 2019]
+    # df_2020 = df[df["source"] == 2020]
+
+    df_2020 = df
 
     if split == "MultilabelStratifiedKFold":
         kf = MultilabelStratifiedKFold(n_splits=n_splits, random_state=seed, shuffle=True).split(df_2020, df_2020[["label"]].values)
@@ -108,7 +115,7 @@ def get_train_val_split(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/ca
 
     for fold, (train_idx, valid_idx) in enumerate(kf):
         df_train = df_2020.iloc[train_idx]
-        df_train = pd.concat([df_train, df_2019])
+        # df_train = pd.concat([df_train, df_2019])
         df_val = df_2020.iloc[valid_idx]
 
         df_train.to_csv(os.path.join(save_path, "split/{}/train_fold_{}_seed_{}.csv".format(split, fold, seed)))

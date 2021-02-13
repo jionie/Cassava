@@ -17,16 +17,16 @@ class Config:
         # model
         self.model_type = model_type
         # path, specify the path for data
-        self.data_path = '/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/'
+        self.data_path = '/home/leon-zzh/Leon/Kaggle/Cassava/cassava-leaf-disease-classification/'
         # path, specify the path for saving splitted csv
-        self.save_path = '/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/'
+        self.save_path = '/home/leon-zzh/Leon/Kaggle/Cassava/cassava-leaf-disease-classification/'
         # k fold setting
         self.split = "StratifiedKFold"
         self.seed = seed
         self.n_splits = 5
         self.fold = fold
         # path, specify the path for saving model
-        self.model_folder = os.path.join("/media/jionie/my_disk/Kaggle/Cassava/ckpt", self.model_type)
+        self.model_folder = os.path.join("/home/leon-zzh/Leon/Kaggle/Cassava/models", self.model_type)
         if not os.path.exists(self.model_folder):
             os.mkdir(self.model_folder)
         self.checkpoint_folder_all_fold = os.path.join(self.model_folder, 'seed_' + str(self.seed))
@@ -45,25 +45,25 @@ class Config:
         # optimizer
         self.optimizer_name = "AdamW"
         self.adam_epsilon = 1e-8
-        self.max_grad_norm = 2
+        self.max_grad_norm = 2.5
         # lr scheduler, can choose to use proportion or steps
-        self.lr_scheduler_name = 'WarmCosineAnealingRestart'
+        self.lr_scheduler_name = "cosanneal"  # 'WarmCosineAnealingRestart'
         self.warmup_proportion = 0.5 / 30
         self.warmup_steps = 0
         # lr
         self.lr = 1e-3
-        self.weight_decay = 0
+        self.weight_decay = 1e-6
         self.backbone_lr = 1e-3
         # dataloader settings
         self.batch_size = batch_size
         self.val_batch_size = 32
-        self.num_workers = 24
+        self.num_workers = 12
         self.shuffle = True
         self.drop_last = True
         # gradient accumulation
         self.accumulation_steps = accumulation_steps
         # epochs
-        self.num_epoch = 30
+        self.num_epoch = 60
         # saving rate
         self.saving_rate = 1
         # early stopping
@@ -75,30 +75,40 @@ class Config:
         self.WIDTH = width
         self.transforms = A.Compose([
             A.RandomResizedCrop(height=self.HEIGHT, width=self.WIDTH, scale=(0.36, 1.0), p=1.0),
-            A.RandomRotate90(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1,
+                               scale_limit=0.2,
+                               rotate_limit=30,
+                               interpolation=cv2.INTER_LINEAR,
+                               border_mode=cv2.BORDER_REFLECT_101,
+                               p=0.5),
             A.Transpose(p=0.5),
             A.Flip(p=0.5),
-            A.OneOf([
-                A.Cutout(num_holes=4, max_h_size=32, max_w_size=32, fill_value=0),
-                # GridMask(num_grid=(3, 7), p=1),
-                A.GridDistortion(distort_limit=0.01),
-            ], p=0.75),
-            A.OneOf([
-                A.IAAAdditiveGaussianNoise(scale=(0.01 * 255, 0.05 * 255)),
-                A.GaussNoise(var_limit=(0.1, 0.5)),
-            ], p=0.1),
+            A.ColorJitter(brightness=0.10,
+                          contrast=0.10,
+                          saturation=0.10,
+                          hue=0.10,
+                          p=0.5),
+            # A.OneOf([
+            #     A.Cutout(num_holes=4, max_h_size=32, max_w_size=32, fill_value=0),
+            #     # GridMask(num_grid=(3, 7), p=1),
+            #     A.GridDistortion(distort_limit=0.01),
+            # ], p=0.75),
+            # A.OneOf([
+            #     A.IAAAdditiveGaussianNoise(scale=(0.01 * 255, 0.05 * 255)),
+            #     A.GaussNoise(var_limit=(0.1, 0.5)),
+            # ], p=0.1),
             A.OneOf([
                 A.MotionBlur(p=0.2),
                 A.MedianBlur(blur_limit=3, p=0.1),
                 A.Blur(blur_limit=3, p=0.1),
-            ], p=0.1),
+            ], p=0.5),
             A.OneOf([
-                A.CLAHE(clip_limit=2),
+                # A.CLAHE(clip_limit=2),
                 A.IAASharpen(),
                 A.IAAEmboss(),
-                A.RandomBrightnessContrast(),
-            ], p=0.1),
-            A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.1),
+                # A.RandomBrightnessContrast(),
+            ], p=0.5),
+            # A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.1),
         ])
 
         self.val_transforms = A.Compose([
