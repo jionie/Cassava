@@ -87,30 +87,28 @@ class Config:
         self.WIDTH = width
         self.transforms = A.Compose([
             A.RandomResizedCrop(height=self.HEIGHT, width=self.WIDTH, scale=(0.36, 1.0), p=1.0),
-            A.RandomRotate90(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1,
+                               scale_limit=0.2,
+                               rotate_limit=30,
+                               interpolation=cv2.INTER_LINEAR,
+                               border_mode=cv2.BORDER_REFLECT_101,
+                               p=0.5),
             A.Transpose(p=0.5),
             A.Flip(p=0.5),
-            A.OneOf([
-                A.Cutout(num_holes=4, max_h_size=32, max_w_size=32, fill_value=0),
-                # GridMask(num_grid=(3, 7), p=1),
-                A.GridDistortion(distort_limit=0.01),
-            ], p=0.75),
-            A.OneOf([
-                A.IAAAdditiveGaussianNoise(scale=(0.01 * 255, 0.05 * 255)),
-                A.GaussNoise(var_limit=(0.1, 0.5)),
-            ], p=0.1),
+            A.ColorJitter(brightness=0.10,
+                          contrast=0.10,
+                          saturation=0.10,
+                          hue=0.10,
+                          p=0.5),
             A.OneOf([
                 A.MotionBlur(p=0.2),
                 A.MedianBlur(blur_limit=3, p=0.1),
                 A.Blur(blur_limit=3, p=0.1),
-            ], p=0.1),
+            ], p=0.5),
             A.OneOf([
-                A.CLAHE(clip_limit=2),
                 A.IAASharpen(),
                 A.IAAEmboss(),
-                A.RandomBrightnessContrast(),
-            ], p=0.1),
-            A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.1),
+            ], p=0.5),
         ])
 
         self.val_transforms = A.Compose([
