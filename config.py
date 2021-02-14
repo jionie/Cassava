@@ -61,9 +61,9 @@ class Config:
         self.warmup_steps = 0
 
         # lr
-        self.lr = 1e-3
+        self.lr = 5e-5
         self.weight_decay = 0
-        self.backbone_lr = 1e-3
+        self.backbone_lr = 5e-5
 
         # dataloader settings
         self.batch_size = batch_size
@@ -79,7 +79,7 @@ class Config:
         # saving rate
         self.saving_rate = 1
         # early stopping
-        self.early_stopping = 30 / self.saving_rate
+        self.early_stopping = 10 / self.saving_rate
         # progress rate
         self.progress_rate = 1 / 10
         # transform
