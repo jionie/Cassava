@@ -106,6 +106,10 @@ class CassavaModel(nn.Module):
             self.backbone.pre_logits = nn.Identity()
             self.feature_size = 1024
 
+        elif "resnest" in model_name.lower():
+            self.backbone = timm.create_model(model_name, pretrained=True)
+            self.feature_size = 1000
+
         else:
             raise NotImplementedError
 
@@ -144,6 +148,10 @@ class CassavaModel(nn.Module):
 
         elif "vit" in self.model_name.lower():
             x = self.backbone.forward_features(x)
+            logit = x
+
+        elif "resnest" in self.model_name.lower():
+            x = self.backbone.forward(x)
             logit = x
 
         else:

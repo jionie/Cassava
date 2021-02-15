@@ -9,6 +9,7 @@ class Config:
                  width=512):
         # setting
         self.reuse_model = True
+        self.is_finetune = False  # set this to True if only use 2020 data to train
         self.data_parallel = False  # enable data parallel training
         self.adversarial = False  # enable adversarial training, not support now
         self.apex = True  # enable mix precision training

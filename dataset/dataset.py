@@ -88,7 +88,9 @@ def get_train_val_split(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/ca
                         save_path="/media/jionie/my_disk/Kaggle/Cassava/input/cassava-leaf-disease-classification/",
                         n_splits=5,
                         seed=960630,
-                        split="StratifiedKFold"):
+                        split="StratifiedKFold",
+                        is_finetune=False
+                        ):
 
     df_path = os.path.join(data_path, "merged_pseudo.csv")
     os.makedirs(os.path.join(save_path, "split/{}".format(split)), exist_ok=True)
@@ -108,7 +110,10 @@ def get_train_val_split(data_path="/media/jionie/my_disk/Kaggle/Cassava/input/ca
 
     for fold, (train_idx, valid_idx) in enumerate(kf):
         df_train = df_2020.iloc[train_idx]
-        df_train = pd.concat([df_train, df_2019])
+
+        if not is_finetune:
+            df_train = pd.concat([df_train, df_2019])
+
         df_val = df_2020.iloc[valid_idx]
 
         df_train.to_csv(os.path.join(save_path, "split/{}/train_fold_{}_seed_{}.csv".format(split, fold, seed)))
